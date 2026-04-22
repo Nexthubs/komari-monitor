@@ -9,6 +9,7 @@ import (
 	"github.com/komari-monitor/komari/common"
 	"github.com/komari-monitor/komari/config"
 	"github.com/komari-monitor/komari/database/accounts"
+	"github.com/komari-monitor/komari/database/clients"
 	"github.com/komari-monitor/komari/database/dbcore"
 	"github.com/komari-monitor/komari/database/models"
 	"github.com/komari-monitor/komari/ws"
@@ -112,6 +113,41 @@ func GetClients(c *gin.Context) {
 				report.CPU.Usage = 0.01
 			}
 			resp.Data[key] = *report
+		}
+
+		// 为离线节点补充数据库中的最近一条记录，避免前端因为没有实时缓存而无法查看历史详情。
+		if uuID != "" {
+			if _, ok := resp.Data[uuID]; !ok {
+				report, err := GetLatestStoredReport(uuID)
+				if err == nil && report != nil {
+					report.UUID = ""
+					if report.CPU.Usage == 0 {
+						report.CPU.Usage = 0.01
+					}
+					resp.Data[uuID] = *report
+				}
+			}
+		} else {
+			clientList, err := clients.GetAllClientBasicInfo()
+			if err == nil {
+				for _, client := range clientList {
+					if !isLogin && hiddenMap[client.UUID] {
+						continue
+					}
+					if _, ok := resp.Data[client.UUID]; ok {
+						continue
+					}
+					report, err := GetLatestStoredReport(client.UUID)
+					if err != nil || report == nil {
+						continue
+					}
+					report.UUID = ""
+					if report.CPU.Usage == 0 {
+						report.CPU.Usage = 0.01
+					}
+					resp.Data[client.UUID] = *report
+				}
+			}
 		}
 
 		err = conn.WriteJSON(gin.H{"status": "success", "data": resp})
