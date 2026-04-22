@@ -373,6 +373,13 @@ func getNodesLatestStatus(ctx context.Context, req *rpc.JsonRpcRequest) (any, *r
 			return
 		}
 		stats := getPingStatsForNode(uuid, pingTasks)
+		isOnline := onlineSet[uuid]
+		if !isOnline && !rep.UpdatedAt.IsZero() {
+			// Compatibility fallback for themes that disable detail navigation
+			// strictly based on the "online" flag. A stale timestamp still lets
+			// the frontend distinguish historical data from real-time data.
+			isOnline = true
+		}
 		rl := recordLike{
 			Client:         uuid,
 			Time:           models.FromTime(rep.UpdatedAt),
@@ -395,7 +402,7 @@ func getNodesLatestStatus(ctx context.Context, req *rpc.JsonRpcRequest) (any, *r
 			Process:        rep.Process,
 			Connections:    rep.Connections.TCP + rep.Connections.UDP,
 			ConnectionsUdp: rep.Connections.UDP,
-			Online:         onlineSet[uuid],
+			Online:         isOnline,
 			Uptime:         rep.Uptime,
 			Ping:           stats,
 		}
