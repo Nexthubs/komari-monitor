@@ -22,7 +22,7 @@ ARG TARGETARCH
 
 WORKDIR /src
 
-RUN apk add --no-cache git
+RUN apk add --no-cache build-base git
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -33,14 +33,14 @@ COPY . .
 RUN mkdir -p public/defaultTheme/dist
 COPY --from=frontend-builder /src/komari-web/dist ./public/defaultTheme/dist
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/komari .
+RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/komari .
 
 
 FROM alpine:3.21
 
 WORKDIR /app
 
-RUN apk add --no-cache tzdata
+RUN apk add --no-cache libgcc libstdc++ sqlite-libs tzdata
 
 COPY --from=backend-builder /out/komari /app/komari
 
