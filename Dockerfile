@@ -7,7 +7,13 @@ WORKDIR /src
 
 RUN apk add --no-cache git
 
-RUN git clone --depth 1 --branch "${KOMARI_WEB_REF}" "${KOMARI_WEB_REPO}" komari-web
+RUN git clone --depth 1 --branch "${KOMARI_WEB_REF}" "${KOMARI_WEB_REPO}" komari-web \
+ && cd /src/komari-web \
+ && echo "KOMARI_WEB_REPO=${KOMARI_WEB_REPO}" \
+ && echo "KOMARI_WEB_REF=${KOMARI_WEB_REF}" \
+ && echo "KOMARI_WEB_COMMIT=$(git rev-parse HEAD)" \
+ && grep -n 'count: 7' src/pages/instance/PingChart.tsx \
+ && grep -n 'count: 30' src/pages/instance/PingChart.tsx
 
 WORKDIR /src/komari-web
 
