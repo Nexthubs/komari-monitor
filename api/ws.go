@@ -125,6 +125,7 @@ func GetClients(c *gin.Context) {
 						report.CPU.Usage = 0.01
 					}
 					resp.Data[uuID] = *report
+					resp.Online = append(resp.Online, uuID)
 				}
 			}
 		} else {
@@ -146,6 +147,7 @@ func GetClients(c *gin.Context) {
 						report.CPU.Usage = 0.01
 					}
 					resp.Data[client.UUID] = *report
+					resp.Online = append(resp.Online, client.UUID)
 				}
 			}
 		}
