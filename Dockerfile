@@ -1,6 +1,6 @@
 FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
 
-ARG KOMARI_WEB_REPO=https://github.com/komari-monitor/komari-web.git
+ARG KOMARI_WEB_REPO=https://github.com/Nexthubs/komari-web.git
 ARG KOMARI_WEB_REF=main
 
 WORKDIR /src
