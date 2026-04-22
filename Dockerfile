@@ -1,14 +1,48 @@
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
+
+ARG KOMARI_WEB_REPO=https://github.com/komari-monitor/komari-web.git
+ARG KOMARI_WEB_REF=main
+
+WORKDIR /src
+
+RUN apk add --no-cache git
+
+RUN git clone --depth 1 --branch "${KOMARI_WEB_REF}" "${KOMARI_WEB_REPO}" komari-web
+
+WORKDIR /src/komari-web
+
+RUN npm install
+RUN npm run build
+
+
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS backend-builder
+
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /src
+
+RUN apk add --no-cache git
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Inject the built default theme so go:embed can package the frontend assets.
+RUN mkdir -p public/defaultTheme/dist
+COPY --from=frontend-builder /src/komari-web/dist ./public/defaultTheme/dist
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/komari .
+
+
 FROM alpine:3.21
 
 WORKDIR /app
 
-# Docker buildx 会在构建时自动填充这些变量
-ARG TARGETOS
-ARG TARGETARCH
-
 RUN apk add --no-cache tzdata
 
-COPY komari-${TARGETOS}-${TARGETARCH} /app/komari
+COPY --from=backend-builder /out/komari /app/komari
 
 RUN chmod +x /app/komari
 
