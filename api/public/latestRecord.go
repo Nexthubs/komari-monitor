@@ -40,6 +40,11 @@ func GetClientRecentRecords(c *gin.Context) {
 		}
 	}
 
-	records, _ := api.Records.Get(uuid)
+	records, err := api.GetRecentReports(uuid)
+	if err != nil {
+		api.RespondError(c, 500, "Failed to retrieve recent records: "+err.Error())
+		return
+	}
+
 	api.RespondSuccess(c, records)
 }
