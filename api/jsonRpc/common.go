@@ -295,18 +295,27 @@ func getNodesLatestStatus(ctx context.Context, req *rpc.JsonRpcRequest) (any, *r
 		onlineSet[uuid] = true
 	}
 
+	clientInfo, err := clients.GetAllClientBasicInfo()
+	if err != nil {
+		return nil, rpc.MakeError(rpc.InternalError, "Failed to get client info", err.Error())
+	}
+
 	// Hidden 过滤
 	if meta.Permission != "admin" {
-		cinfo, err := clients.GetAllClientBasicInfo()
-		if err != nil {
-			return nil, rpc.MakeError(rpc.InternalError, "Failed to get client info", err.Error())
-		}
-		hidden := make(map[string]bool, len(cinfo))
-		for _, c := range cinfo {
+		hidden := make(map[string]bool, len(clientInfo))
+		for _, c := range clientInfo {
 			if c.Hidden {
 				hidden[c.UUID] = true
 			}
 		}
+		visibleClients := clientInfo[:0]
+		for _, c := range clientInfo {
+			if hidden[c.UUID] {
+				continue
+			}
+			visibleClients = append(visibleClients, c)
+		}
+		clientInfo = visibleClients
 		for uuid := range latest {
 			if hidden[uuid] {
 				delete(latest, uuid)
@@ -314,9 +323,15 @@ func getNodesLatestStatus(ctx context.Context, req *rpc.JsonRpcRequest) (any, *r
 		}
 	}
 
-	// 如果指定 uuid 但找不到，直接返回 not found
 	if params.UUID != "" {
-		if _, ok := latest[params.UUID]; !ok {
+		found := false
+		for _, client := range clientInfo {
+			if client.UUID == params.UUID {
+				found = true
+				break
+			}
+		}
+		if !found {
 			return nil, rpc.MakeError(rpc.InvalidParams, "Node not found", params.UUID)
 		}
 	}
@@ -387,9 +402,27 @@ func getNodesLatestStatus(ctx context.Context, req *rpc.JsonRpcRequest) (any, *r
 		respMap[uuid] = rl
 	}
 
+	loadStoredLatest := func(uuid string) *common.Report {
+		if rep, ok := latest[uuid]; ok && rep != nil {
+			return rep
+		}
+		rep, err := api.GetLatestStoredReport(uuid)
+		if err != nil {
+			return nil
+		}
+		if rep != nil {
+			latest[uuid] = rep
+		}
+		return rep
+	}
+
 	// 选择逻辑
 	if params.UUID != "" { // 单个
-		appendOne(params.UUID, latest[params.UUID])
+		rep := loadStoredLatest(params.UUID)
+		if rep == nil {
+			return nil, rpc.MakeError(rpc.InvalidParams, "Node not found", params.UUID)
+		}
+		appendOne(params.UUID, rep)
 		return respMap[params.UUID], nil
 	}
 	selected := map[string]bool{}
@@ -397,15 +430,15 @@ func getNodesLatestStatus(ctx context.Context, req *rpc.JsonRpcRequest) (any, *r
 		for _, id := range params.UUIDs {
 			selected[id] = true
 		}
-		for uuid, rep := range latest {
-			if selected[uuid] {
-				appendOne(uuid, rep)
+		for _, client := range clientInfo {
+			if selected[client.UUID] {
+				appendOne(client.UUID, loadStoredLatest(client.UUID))
 			}
 		}
 		return respMap, nil
 	}
-	for uuid, rep := range latest {
-		appendOne(uuid, rep)
+	for _, client := range clientInfo {
+		appendOne(client.UUID, loadStoredLatest(client.UUID))
 	}
 	return respMap, nil
 }
@@ -492,6 +525,15 @@ func getNodeRecentStatus(ctx context.Context, req *rpc.JsonRpcRequest) (any, *rp
 
 	raw, _ := api.Records.Get(params.UUID)
 	reports, _ := raw.([]common.Report)
+	if len(reports) == 0 {
+		report, err := api.GetLatestStoredReport(params.UUID)
+		if err != nil {
+			return nil, rpc.MakeError(rpc.InternalError, "Failed to fetch recent status", err.Error())
+		}
+		if report != nil {
+			reports = []common.Report{*report}
+		}
+	}
 
 	// 扁平化为 { count, records: [] }
 	type flatRecord struct {
